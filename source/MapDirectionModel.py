@@ -529,43 +529,84 @@ def get_random_node_from_main_network(main_network):
 
 
 get_random_node_from_main_network(main_network)
+#get_random_node_from_main_network(main_network)
+
 
 def test_specific_road_to_road_route(start_road_query, goal_road_query, main_network):
-
-    # Get all nodes matching those street names from the raw JSON data
+    # Gather all raw node entries matching the street names
     start_road_nodes = find_nodes_by_road_name(data, start_road_query)
     goal_road_nodes  = find_nodes_by_road_name(data, goal_road_query)
 
-    # Filter them to make sure we ONLY use nodes that survived the get_largest_component cleaning
-    clean_network_set = set(main_network)
-    valid_start_nodes = [n for n in start_road_nodes if str(n) in clean_network_set or n in clean_network_set]
-    valid_goal_nodes  = [n for n in goal_road_nodes if str(n) in clean_network_set or n in clean_network_set]
+    # Extract types based on how your graph dictionary keys are structured
+    # (Inspects if graph uses '12345' strings or 12345 integers natively)
+    sample_graph_key = list(graph.keys())[0] if graph else ""
+    is_string_schema = isinstance(sample_graph_key, str)
 
-    # Check if we found a match and extract the IDs
-    if not valid_start_nodes:
-        print(f"Error: Could not find a valid, connected node for '{start_road_query}'")
-    elif not valid_goal_nodes:
-        print(f"Error: Could not find a valid, connected node for '{goal_road_query}'")
+    # Create a strict, correctly-typed network lookup pool
+    if is_string_schema:
+        clean_network_set = {str(n) for n in main_network}
+        valid_starts = [str(n) for n in start_road_nodes if str(n) in clean_network_set]
+        valid_goals  = [str(n) for n in goal_road_nodes if str(n) in clean_network_set]
     else:
-        # Safely pick the first node found on each street (or use random.choice)
-        # Ensure they are formatted as strings to avoid the integer lookup bug!
-        final_start_node = str(valid_start_nodes[0])
-        final_goal_node  = str(valid_goal_nodes[0])
-        
+        clean_network_set = {int(n) for n in main_network}
+        valid_starts = [int(n) for n in start_road_nodes if int(n) in clean_network_set]
+        valid_goals  = [int(n) for n in goal_road_nodes if int(n) in clean_network_set]
+
+    # Check for validity
+    if not valid_starts:
+        print(f"Error: Could not find any valid connected graph entries for '{start_road_query}'")
+        return
+    if not valid_goals:
+        print(f"Error: Could not find any valid connected graph entries for '{goal_road_query}'")
+        return
+
+    # ROBUST MATCHING LOOP: Try street nodes until a valid routing combo matches
+    # This prevents getting stuck on a dead-end boundary node at index [0]
+    traf_nodes_1, traf_nodes_2, traf_nodes_3 = None, None, None
+    final_start_node, final_goal_node = None, None
+
+    # Limit search optimization scan so it doesn't loop infinitely across huge arrays
+    for s_node in valid_starts[:5]: 
+        for g_node in valid_goals[:5]:
+            if s_node == g_node:
+                continue
+                
+            # Try running the base search engine
+            res_1 = a_star_shortest_search(graph, node_coords, s_node, g_node)
+            if res_1:
+                traf_nodes_1 = res_1
+                final_start_node = s_node
+                final_goal_node = g_node
+                # Calculate remaining profiles using the matched pair
+                traf_nodes_2 = a_star_fastest_search(graph, node_coords, s_node, g_node)
+                traf_nodes_3 = a_star_eco_search(graph, node_coords, s_node, g_node)
+                break
+        if traf_nodes_1:
+            break
+
+    # Output metrics matching your working random test block template
+    if traf_nodes_1 and traf_nodes_2 and traf_nodes_3:
         print("========================================")
-        print(f"Executing Road-to-Road Routing:")
+        print(f"Executing Road-to-Road Routing [SUCCESS]:")
         print(f"  Origin Street:      {start_road_query} (Node: {final_start_node})")
         print(f"  Destination Street: {goal_road_query} (Node: {final_goal_node})")
         print("========================================")
-        
-        traf_nodes_1 = a_star_shortest_search(graph, node_coords, final_start_node, final_goal_node)
-        traf_nodes_2 = a_star_fastest_search(graph, node_coords, final_start_node, final_goal_node)
-        traf_nodes_3 = a_star_eco_search(graph, node_coords, final_start_node, final_goal_node)
-        
-        if traf_nodes_1:
-            print(f"SUCCESS! Route calculated between the two streets.")
-            visualize_all_routes(traf_nodes_1, traf_nodes_2, traf_nodes_3, node_coords, "trafford_route_comparison.html")
-        else:
-            print("Routing failed between these two specific street points.")
+
+        short_dist = sum(e['distance'] for n in traf_nodes_1 for e in graph.get(n, []) if e['to'] in traf_nodes_1) / 2
+        short_time = sum(e['time'] for n in traf_nodes_1 for e in graph.get(n, []) if e['to'] in traf_nodes_1) / 2
+
+        fast_dist = sum(e['distance'] for n in traf_nodes_2 for e in graph.get(n, []) if e['to'] in traf_nodes_2) / 2
+        fast_time = sum(e['time'] for n in traf_nodes_2 for e in graph.get(n, []) if e['to'] in traf_nodes_2) / 2
+
+        eco_dist = sum(e['distance'] for n in traf_nodes_3 for e in graph.get(n, []) if e['to'] in traf_nodes_3) / 2
+        eco_time = sum(e['time'] for n in traf_nodes_3 for e in graph.get(n, []) if e['to'] in traf_nodes_3) / 2
+
+        print(f"Shortest Path Results -> Distance: {short_dist:.1f}m | Time: {short_time:.1f}s")
+        print(f"Fastest Path Results  -> Distance: {fast_dist:.1f}m | Time: {fast_time:.1f}s")
+        print(f"Eco-Friendly Path Results -> Distance: {eco_dist:.1f}m | Time: {eco_time:.1f}s")
+
+        visualize_all_routes(traf_nodes_1, traf_nodes_2, traf_nodes_3, node_coords, "trafford_route_comparison.html")
+    else:
+        print(f"Routing failed: No valid connected paths could link the segments between '{start_road_query}' and '{goal_road_query}'.")
 
 test_specific_road_to_road_route("Chester Street", "Barton Dock Road", main_network)
