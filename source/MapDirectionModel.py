@@ -180,8 +180,8 @@ if len(main_network) > 1:
     # Run A*
     nodes_1 = a_star_shortest_search(graph, node_coords, sample_start, sample_destination)
 
-    if nodes:
-        print(f"SUCCESS! Path found consisting of {len(nodes)} nodes.")
+    if nodes_1:
+        print(f"SUCCESS! Path found consisting of {len(nodes_1)} nodes.")
     else:
         print("This should theoretically never happen now!")
 else:
