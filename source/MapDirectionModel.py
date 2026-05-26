@@ -18,7 +18,7 @@ except ImportError:
 
 
 # Load the raw Overpass JSON
-with open('C:\\Users\\23674569\\Downloads\\ModelMapping\\data\\ManMap.json', 'r', encoding='utf-8') as f:
+with open('.\\data\\ManMap.json', 'r', encoding='utf-8') as f:
     data = json.load(f)
 
 
