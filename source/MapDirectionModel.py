@@ -347,30 +347,6 @@ def get_largest_component(graph):
 main_network = get_largest_component(graph)
 print(f"Main connected network size: {len(main_network)} nodes")
 
-if len(main_network) > 1:
-    # Pick two random nodes STRICTLY from the main network
-    sample_start, sample_destination = random.sample(main_network, 2)
-    
-    print("========================================")
-    print(f"Guaranteed A* Route Test:")
-    print(f"  Start Node ID: {sample_start}")
-    print(f"  End Node ID:   {sample_destination}")
-    print("========================================")
-
-    # Run A*
-    nodes_1 = a_star_shortest_search(graph, node_coords, sample_start, sample_destination)
-    nodes_2 = a_star_fastest_search(graph, node_coords, sample_start, sample_destination)
-    nodes_3 = a_star_eco_search(graph, node_coords, sample_start, sample_destination)
-    if nodes_1:
-        print(f"SUCCESS! Path found consisting of {len(nodes_1)} nodes.")
-    else:
-        print("This should theoretically never happen now!")
-
-    if nodes_2:
-        print(f"SUCCESS! Fastest path found consisting of {len(nodes_2)} nodes.")   
-    
-else:
-    print("Error: Could not find a valid connected network.")
 
 
 
@@ -483,26 +459,10 @@ def visualize_all_routes(shortest_path, fastest_path, eco_path, node_coords, fil
 
 
 # Compute total distance and total time for the SHORTEST path
-short_dist = sum(e['distance'] for n in nodes_1 for e in graph.get(n, []) if e['to'] in nodes_1) / 2
-short_time = sum(e['time'] for n in nodes_1 for e in graph.get(n, []) if e['to'] in nodes_1) / 2
 
-# Compute total distance and total time for the FASTEST path
-fast_dist = sum(e['distance'] for n in nodes_2 for e in graph.get(n, []) if e['to'] in nodes_2) / 2
-fast_time = sum(e['time'] for n in nodes_2 for e in graph.get(n, []) if e['to'] in nodes_2) / 2
 
-# Compute total distance and total time for the ECO path
-eco_dist = sum(e['distance'] for n in nodes_3 for e in graph.get(n, []) if e['to'] in nodes_3) / 2
-eco_time = sum(e['time'] for n in nodes_3 for e in graph.get(n, []) if e['to'] in nodes_3) / 2
 
-print(f"Shortest Path Results -> Distance: {short_dist:.1f}m | Time: {short_time:.1f}s")
-print(f"Fastest Path Results  -> Distance: {fast_dist:.1f}m | Time: {fast_time:.1f}s")
-print(f"Eco-Friendly Path Results -> Distance: {eco_dist:.1f}m | Time: {eco_time:.1f}s")
 
-# visualize_route(nodes_1, node_coords)
-# visualize_route(nodes_2, node_coords)
-# visualize_route(nodes_3, node_coords)
-
-visualize_all_routes(nodes_1, nodes_2, nodes_3, node_coords, "route_comparison.html")
 
 def find_nodes_by_road_name(data, target_road_name):
     """
@@ -525,43 +485,87 @@ def find_nodes_by_road_name(data, target_road_name):
     return list(dict.fromkeys(matching_nodes))
 
 
-start_road_query = "Chester Street"
-goal_road_query  = "Barton Dock Road"
+def get_random_node_from_main_network(main_network):
+    if len(main_network) > 1:
+        # Pick two random nodes STRICTLY from the main network
+        sample_start, sample_destination = random.sample(main_network, 2)
+        
+        print("========================================")
+        print(f"Guaranteed A* Route Test:")
+        print(f"  Start Node ID: {sample_start}")
+        print(f"  End Node ID:   {sample_destination}")
+        print("========================================")
 
-# Get all nodes matching those street names from the raw JSON data
-start_road_nodes = find_nodes_by_road_name(data, start_road_query)
-goal_road_nodes  = find_nodes_by_road_name(data, goal_road_query)
+        # Run A*
+        nodes_1 = a_star_shortest_search(graph, node_coords, sample_start, sample_destination)
+        nodes_2 = a_star_fastest_search(graph, node_coords, sample_start, sample_destination)
+        nodes_3 = a_star_eco_search(graph, node_coords, sample_start, sample_destination)
+        if nodes_1:
+            print(f"SUCCESS! Path found consisting of {len(nodes_1)} nodes.")
+        else:
+            print("This should theoretically never happen now!")
 
-# Filter them to make sure we ONLY use nodes that survived the get_largest_component cleaning
-clean_network_set = set(main_network)
-valid_start_nodes = [n for n in start_road_nodes if str(n) in clean_network_set or n in clean_network_set]
-valid_goal_nodes  = [n for n in goal_road_nodes if str(n) in clean_network_set or n in clean_network_set]
+        if nodes_2:
+            print(f"SUCCESS! Fastest path found consisting of {len(nodes_2)} nodes.")   
+        
+        short_dist = sum(e['distance'] for n in nodes_1 for e in graph.get(n, []) if e['to'] in nodes_1) / 2
+        short_time = sum(e['time'] for n in nodes_1 for e in graph.get(n, []) if e['to'] in nodes_1) / 2
 
-# Check if we found a match and extract the IDs
-if not valid_start_nodes:
-    print(f"Error: Could not find a valid, connected node for '{start_road_query}'")
-elif not valid_goal_nodes:
-    print(f"Error: Could not find a valid, connected node for '{goal_road_query}'")
-else:
-    # Safely pick the first node found on each street (or use random.choice)
-    # Ensure they are formatted as strings to avoid the integer lookup bug!
-    final_start_node = str(valid_start_nodes[0])
-    final_goal_node  = str(valid_goal_nodes[0])
-    
-    print("========================================")
-    print(f"Executing Road-to-Road Routing:")
-    print(f"  Origin Street:      {start_road_query} (Node: {final_start_node})")
-    print(f"  Destination Street: {goal_road_query} (Node: {final_goal_node})")
-    print("========================================")
-    
-    traf_nodes_1 = a_star_shortest_search(graph, node_coords, final_start_node, final_goal_node)
-    traf_nodes_2 = a_star_fastest_search(graph, node_coords, final_start_node, final_goal_node)
-    traf_nodes_3 = a_star_eco_search(graph, node_coords, final_start_node, final_goal_node)
-    
-    if traf_nodes_1:
-        print(f"SUCCESS! Route calculated between the two streets.")
-        visualize_all_routes(traf_nodes_1, traf_nodes_2, traf_nodes_3, node_coords, "trafford_route_comparison.html")
+        # Compute total distance and total time for the FASTEST path
+        fast_dist = sum(e['distance'] for n in nodes_2 for e in graph.get(n, []) if e['to'] in nodes_2) / 2
+        fast_time = sum(e['time'] for n in nodes_2 for e in graph.get(n, []) if e['to'] in nodes_2) / 2
+
+        # Compute total distance and total time for the ECO path
+        eco_dist = sum(e['distance'] for n in nodes_3 for e in graph.get(n, []) if e['to'] in nodes_3) / 2
+        eco_time = sum(e['time'] for n in nodes_3 for e in graph.get(n, []) if e['to'] in nodes_3) / 2
+
+        print(f"Shortest Path Results -> Distance: {short_dist:.1f}m | Time: {short_time:.1f}s")
+        print(f"Fastest Path Results  -> Distance: {fast_dist:.1f}m | Time: {fast_time:.1f}s")
+        print(f"Eco-Friendly Path Results -> Distance: {eco_dist:.1f}m | Time: {eco_time:.1f}s")
+
+        visualize_all_routes(nodes_1, nodes_2, nodes_3, node_coords, "route_comparison.html")
     else:
-        print("Routing failed between these two specific street points.")
+        print("Error: Could not find a valid connected network.")
 
 
+get_random_node_from_main_network(main_network)
+
+def test_specific_road_to_road_route(start_road_query, goal_road_query, main_network):
+
+    # Get all nodes matching those street names from the raw JSON data
+    start_road_nodes = find_nodes_by_road_name(data, start_road_query)
+    goal_road_nodes  = find_nodes_by_road_name(data, goal_road_query)
+
+    # Filter them to make sure we ONLY use nodes that survived the get_largest_component cleaning
+    clean_network_set = set(main_network)
+    valid_start_nodes = [n for n in start_road_nodes if str(n) in clean_network_set or n in clean_network_set]
+    valid_goal_nodes  = [n for n in goal_road_nodes if str(n) in clean_network_set or n in clean_network_set]
+
+    # Check if we found a match and extract the IDs
+    if not valid_start_nodes:
+        print(f"Error: Could not find a valid, connected node for '{start_road_query}'")
+    elif not valid_goal_nodes:
+        print(f"Error: Could not find a valid, connected node for '{goal_road_query}'")
+    else:
+        # Safely pick the first node found on each street (or use random.choice)
+        # Ensure they are formatted as strings to avoid the integer lookup bug!
+        final_start_node = str(valid_start_nodes[0])
+        final_goal_node  = str(valid_goal_nodes[0])
+        
+        print("========================================")
+        print(f"Executing Road-to-Road Routing:")
+        print(f"  Origin Street:      {start_road_query} (Node: {final_start_node})")
+        print(f"  Destination Street: {goal_road_query} (Node: {final_goal_node})")
+        print("========================================")
+        
+        traf_nodes_1 = a_star_shortest_search(graph, node_coords, final_start_node, final_goal_node)
+        traf_nodes_2 = a_star_fastest_search(graph, node_coords, final_start_node, final_goal_node)
+        traf_nodes_3 = a_star_eco_search(graph, node_coords, final_start_node, final_goal_node)
+        
+        if traf_nodes_1:
+            print(f"SUCCESS! Route calculated between the two streets.")
+            visualize_all_routes(traf_nodes_1, traf_nodes_2, traf_nodes_3, node_coords, "trafford_route_comparison.html")
+        else:
+            print("Routing failed between these two specific street points.")
+
+test_specific_road_to_road_route("Chester Street", "Barton Dock Road", main_network)
