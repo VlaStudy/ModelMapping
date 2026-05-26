@@ -2,9 +2,23 @@ import json
 from collections import defaultdict
 import math
 import heapq
+import random
+import subprocess
+import sys
+import webbrowser
+import os
+
+try:
+    import folium
+except ImportError:
+    print("Folium not found. Installing it automatically...")
+    # This safely invokes the exact Python executable running your VS Code script
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "folium"])
+    import folium
+
 
 # Load the raw Overpass JSON
-with open('C:\\Users\\23674569\\Downloads\\ModelMapping\\data\\export.json', 'r', encoding='utf-8') as f:
+with open('C:\\Users\\23674569\\Downloads\\ModelMapping\\data\\ManMap.json', 'r', encoding='utf-8') as f:
     data = json.load(f)
 
 
@@ -56,7 +70,7 @@ for element in data['elements']:
                 graph[node_b].append((node_a, dist))
 
 
-def a_star_search(graph, node_coords, start_id, goal_id):
+def a_star_shortest_search(graph, node_coords, start_id, goal_id):
     """
     Finds the shortest path between start_id and goal_id using A*.
     Returns a list of node IDs forming the path, or None if no path exists.
@@ -108,10 +122,11 @@ def a_star_search(graph, node_coords, start_id, goal_id):
     return None  # No path found
 
 
+
 # start_node = 334801  # regent road roundabout
 # end_node = 3346329    # Deansgate interchange
 
-# path = a_star_search(graph, node_coords, start_node, end_node)
+# path = a_star_shortest_search(graph, node_coords, start_node, end_node)
 
 # if path:
 #     print(f"Path found! It consists of {len(path)} intersections/nodes.")
@@ -119,20 +134,94 @@ def a_star_search(graph, node_coords, start_id, goal_id):
 # else:
 #     print("No route could be found between those nodes.")
 
-test_way = None
-for element in data['elements']:
-    if element['type'] == 'way' and 'nodes' in element and len(element['nodes']) > 1:
-        test_way = element
-        break
+def get_largest_component(graph):
+    """
+    Finds the largest fully connected network of nodes in the graph.
+    Bypasses isolated islands and broken boundary roads.
+    """
+    visited = set()
+    largest_component = []
 
-if test_way:
-    connected_nodes = test_way['nodes']
-    print(f"Success! Found a street (Way ID: {test_way['id']})")
-    print(f"Use these two IDs to test your A* algorithm:")
-    print(f"  Start Node ID: {connected_nodes[0]}")
-    print(f"  End Node ID:   {connected_nodes[-1]}")
+    for start_node in graph:
+        if start_node not in visited:
+            # Explore this specific island/component using BFS
+            component = []
+            queue = [start_node]
+            visited.add(start_node)
+            
+            while queue:
+                current = queue.pop(0)
+                component.append(current)
+                
+                for neighbor, _ in graph[current]:
+                    if neighbor not in visited:
+                        visited.add(neighbor)
+                        queue.append(neighbor)
+            
+            # Keep track of whichever component is the biggest
+            if len(component) > len(largest_component):
+                largest_component = component
+                
+    return largest_component
+
+main_network = get_largest_component(graph)
+print(f"Main connected network size: {len(main_network)} nodes")
+
+if len(main_network) > 1:
+    # Pick two random nodes STRICTLY from the main network
+    sample_start, sample_destination = random.sample(main_network, 2)
+    
+    print("========================================")
+    print(f"Guaranteed A* Route Test:")
+    print(f"  Start Node ID: {sample_start}")
+    print(f"  End Node ID:   {sample_destination}")
+    print("========================================")
+
+    # Run A*
+    nodes_1 = a_star_shortest_search(graph, node_coords, sample_start, sample_destination)
+
+    if nodes:
+        print(f"SUCCESS! Path found consisting of {len(nodes)} nodes.")
+    else:
+        print("This should theoretically never happen now!")
 else:
-    print("Error: No 'way' elements with 'nodes' arrays found. Try updating the Overpass query.")
+    print("Error: Could not find a valid connected network.")
 
-sample_start = list(graph.keys())[0]
-sample_destination = graph[sample_start][0][0]
+
+
+def visualize_route(path_node_ids, node_coords):
+    """
+    Takes the list of Node IDs from A* and draws them on an interactive map.
+    """
+    if not path_node_ids:
+        print("No path to draw!")
+        return
+
+    # Convert the list of IDs into a list of (lat, lon) coordinates
+    route_coords = [node_coords[node_id] for node_id in path_node_ids]
+
+    # Center the map on the starting point
+    start_point = route_coords[0]
+    m = folium.Map(location=start_point, zoom_start=14)
+
+    # Draw the line connecting all the points
+    folium.PolyLine(
+        route_coords, 
+        color="green",       # Eco-friendly green!
+        weight=6, 
+        opacity=0.8
+    ).add_to(m)
+
+    # Add markers for Start and End
+    folium.Marker(route_coords[0], popup="Start", icon=folium.Icon(color="blue")).add_to(m)
+    folium.Marker(route_coords[-1], popup="Destination", icon=folium.Icon(color="red")).add_to(m)
+
+    # Save to a file and open it automatically
+    file_path = "eco_route_map.html"
+    m.save(file_path)
+    
+    # Opens the map in your default web browser
+    webbrowser.open('file://' + os.path.realpath(file_path))
+
+
+visualize_route(nodes, node_coords)
