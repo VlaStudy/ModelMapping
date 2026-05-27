@@ -7,10 +7,20 @@ import subprocess
 import sys
 import webbrowser
 import os
+import time
+import tracemalloc
+try:
+    from codecarbon import EmissionsTracker
+except ImportError:
+    print("CodeCarbon not found. Installing it automatically...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "codecarbon"])
+    from codecarbon import EmissionsTracker
+
+
 
 from AstarAlgorithms import a_star_shortest_search, a_star_fastest_search, a_star_eco_search
 from NodeGraphing import visualize_all_routes, visualize_route
-from AstarGraphUtils import haversine, find_nodes_by_road_name, get_largest_component
+from AstarGraphUtils import haversine, find_nodes_by_road_name, get_largest_component, calculate_route_metrics, profile_algorithm_compute, validate_and_extract_nodes
 
 # Load the raw Overpass JSON
 map_file_path = os.path.join("data", "ManMap.json")
@@ -120,9 +130,29 @@ def get_random_node_from_main_network(main_network):
         print("========================================")
 
         # Run A*
+        
+
+
+
+        tracemalloc.start()
+        start = time.time()
+
+        tracker = EmissionsTracker()
+        tracker.start()
+
         nodes_1 = a_star_shortest_search(graph, node_coords, sample_start, sample_destination)
         nodes_2 = a_star_fastest_search(graph, node_coords, sample_start, sample_destination)
         nodes_3 = a_star_eco_search(graph, node_coords, sample_start, sample_destination)
+        
+        
+        emissions = tracker.stop()
+        print(f"Estimated CO2 emissions: {emissions} kg")
+        end = time.time()
+        print(f"Total execution time: {end - start:.2f} seconds")
+        current, peak = tracemalloc.get_traced_memory()
+        print(f"Current memory usage: {current / 10**6:.2f} MB; Peak: {peak / 10**6:.2f} MB")
+        tracemalloc.stop()
+
         if nodes_1:
             print(f"SUCCESS! Path found consisting of {len(nodes_1)} nodes.")
         else:
@@ -155,31 +185,8 @@ def get_random_node_from_main_network(main_network):
 
 
 def test_specific_road_to_road_route(start_road_query, goal_road_query, main_network):
-    # Gather all raw node entries matching the street names
-    start_road_nodes = find_nodes_by_road_name(data, start_road_query)
-    goal_road_nodes  = find_nodes_by_road_name(data, goal_road_query)
-
-    # Extract types based on how your graph dictionary keys are structured
-    # (Inspects if graph uses '12345' strings or 12345 integers natively)
-    sample_graph_key = list(graph.keys())[0] if graph else ""
-    is_string_schema = isinstance(sample_graph_key, str)
-
-    # Create a strict, correctly-typed network lookup pool
-    if is_string_schema:
-        clean_network_set = {str(n) for n in main_network}
-        valid_starts = [str(n) for n in start_road_nodes if str(n) in clean_network_set]
-        valid_goals  = [str(n) for n in goal_road_nodes if str(n) in clean_network_set]
-    else:
-        clean_network_set = {int(n) for n in main_network}
-        valid_starts = [int(n) for n in start_road_nodes if int(n) in clean_network_set]
-        valid_goals  = [int(n) for n in goal_road_nodes if int(n) in clean_network_set]
-
-    # Check for validity
-    if not valid_starts:
-        print(f"Error: Could not find any valid connected graph entries for '{start_road_query}'")
-        return
-    if not valid_goals:
-        print(f"Error: Could not find any valid connected graph entries for '{goal_road_query}'")
+    valid_starts, valid_goals = validate_and_extract_nodes(graph, data, main_network, start_road_query, goal_road_query)
+    if not valid_starts or not valid_goals:
         return
 
     # ROBUST MATCHING LOOP: Try street nodes until a valid routing combo matches
@@ -232,6 +239,46 @@ def test_specific_road_to_road_route(start_road_query, goal_road_query, main_net
         print(f"Routing failed: No valid connected paths could link the segments between '{start_road_query}' and '{goal_road_query}'.")
 
 
+def evaluate_and_compare_routes(graph, node_coords, start_node, goal_node, file_name="route_comparison.html"):
+    print("\n==================================================")
+    print(f"ROUTING METRICS & EMISSIONS TEST")
+    print(f"From Node: {start_node} -> To Node: {goal_node}")
+    print("==================================================")
+
+    # PROFILE COMPUTE CARBON + RUN ENGINE BACK-TO-BACK
+    path_short, comp_short = profile_algorithm_compute(a_star_shortest_search, graph, node_coords, start_node, goal_node, "Shortest")
+    path_fast,  comp_fast  = profile_algorithm_compute(a_star_fastest_search,  graph, node_coords, start_node, goal_node, "Fastest")
+    path_eco,   comp_eco   = profile_algorithm_compute(a_star_eco_search,      graph, node_coords, start_node, goal_node, "Eco")
+
+    if not (path_short and path_fast and path_eco):
+        print("Routing error: One or more engines could not compute a complete path.")
+        return
+
+    # CALCULATE PHYSICAL DRIVING IMPACTS
+    d_short, t_short, e_short, co2_short = calculate_route_metrics(path_short, graph)
+    d_fast,  t_fast,  e_fast,  co2_fast  = calculate_route_metrics(path_fast, graph)
+    d_eco,   t_eco,   e_eco,   co2_eco   = calculate_route_metrics(path_eco, graph)
+
+    # PRINT RENDERED COMPARISON MATRIX
+    print(f"\n[1] SHORTEST PATH (Distance Optimized):")
+    print(f"    • Trip Profile:  {d_short:.1f} meters | {t_short:.1f} seconds")
+    print(f"    • Driving CO2:   {co2_short:.4f} kg CO2")
+    print(f"    • Code Compute:  {comp_short:.4f} mg CO2")
+
+    print(f"\n[2] FASTEST PATH (Time Optimized):")
+    print(f"    • Trip Profile:  {d_fast:.1f} meters | {t_fast:.1f} seconds")
+    print(f"    • Driving CO2:   {co2_fast:.4f} kg CO2")
+    print(f"    • Code Compute:  {comp_fast:.4f} mg CO2")
+
+    print(f"\n[3] ECO-FRIENDLY PATH (Energy Optimized):")
+    print(f"    • Trip Profile:  {d_eco:.1f} meters | {t_eco:.1f} seconds")
+    print(f"    • Driving CO2:   {co2_eco:.4f} kg CO2  <-- Savings Target!")
+    print(f"    • Code Compute:  {comp_eco:.4f} mg CO2")
+    print("==================================================")
+
+    visualize_all_routes(path_short, path_fast, path_eco, graph, node_coords, file_name)
+
+
 
 setup_graph_from_osm_data(data)
 
@@ -239,8 +286,13 @@ main_network = get_largest_component(graph)
 print(f"Main connected network size: {len(main_network)} nodes")
 
 
-
-get_random_node_from_main_network(main_network)
+sample_start, sample_destination = random.sample(main_network, 2)
+evaluate_and_compare_routes(graph, node_coords, sample_start, sample_destination)
+#get_random_node_from_main_network(main_network)
 #get_random_node_from_main_network(main_network)
 
-test_specific_road_to_road_route("Chester Street", "Barton Dock Road", main_network)
+valid_starts, valid_goals = validate_and_extract_nodes(graph, data, main_network, "Sheepfoot Lane", "Barlow Hall Road")
+if  valid_starts and valid_goals:
+        evaluate_and_compare_routes(graph, node_coords, valid_starts[0], valid_goals[0], "north_to_south.html")
+
+# test_specific_road_to_road_route("Sheepfoot Lane", "Barlow Hall Road", main_network)

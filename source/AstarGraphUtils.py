@@ -1,5 +1,15 @@
 
 
+import sys
+import subprocess
+
+try:
+    from codecarbon import OfflineEmissionsTracker
+except ImportError:
+    print("CodeCarbon not found. Installing it automatically...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "codecarbon"])
+    from codecarbon import OfflineEmissionsTracker
+
 import math
 
 
@@ -71,4 +81,82 @@ def get_largest_component(graph):
     return largest_component
 
 
+def calculate_route_metrics(path, graph):
+    """
+    Accurately sums up the real physical distance, travel time, 
+    and vehicle CO2 emissions by traversing the exact sequential path edges.
+    """
+    total_dist = 0.0
+    total_time = 0.0
+    total_energy_wh = 0.0
+    
+    # UK electricity grid carbon intensity factor (~120g CO2 per kWh)
+    KG_CO2_PER_WH = 0.00012 
 
+    for i in range(len(path) - 1):
+        current_node = path[i]
+        next_node = path[i+1]
+        
+        # Find the explicit edge connecting current_node -> next_node
+        found_edge = False
+        for edge in graph.get(current_node, []):
+            if edge['to'] == next_node:
+                total_dist += edge['distance']
+                total_time += edge['time']
+                total_energy_wh += edge['energy']
+                found_edge = True
+                break
+                
+    vehicle_co2_kg = total_energy_wh * KG_CO2_PER_WH
+    return total_dist, total_time,total_energy_wh, vehicle_co2_kg
+
+
+def profile_algorithm_compute(search_function, graph, node_coords, start_id, goal_id, name):
+    """
+    Runs an A* search variant while isolating and capturing its exact 
+    computational CPU energy and CO2 footprint.
+    """
+    # Initialize an isolated, quiet offline tracker for the country code
+    tracker = OfflineEmissionsTracker(
+        country_iso_code="GBR",
+        save_to_file=False,      # Stops it from cluttering folder with CSVs
+        log_level="error"        # Keeps terminal clean of background messages
+    )
+    
+    tracker.start()
+    calculated_path = search_function(graph, node_coords, start_id, goal_id)
+    emissions_kg = tracker.stop() # Returns total kg of CO2 emitted by this execution block
+    
+    # Convert kg to milligrams for display, since single A* passes are highly efficient!
+    emissions_mg = emissions_kg * 1_000_000 if emissions_kg is not None else 0.0
+    
+    return calculated_path, emissions_mg
+
+def validate_and_extract_nodes(graph, data, main_network, start_road_query, goal_road_query):
+    # Gather all raw node entries matching the street names
+    start_road_nodes = find_nodes_by_road_name(data, start_road_query)
+    goal_road_nodes  = find_nodes_by_road_name(data, goal_road_query)
+
+    # Extract types based on how your graph dictionary keys are structured
+    # (Inspects if graph uses '12345' strings or 12345 integers natively)
+    sample_graph_key = list(graph.keys())[0] if graph else ""
+    is_string_schema = isinstance(sample_graph_key, str)
+
+    # Create a strict, correctly-typed network lookup pool
+    if is_string_schema:
+        clean_network_set = {str(n) for n in main_network}
+        valid_starts = [str(n) for n in start_road_nodes if str(n) in clean_network_set]
+        valid_goals  = [str(n) for n in goal_road_nodes if str(n) in clean_network_set]
+    else:
+        clean_network_set = {int(n) for n in main_network}
+        valid_starts = [int(n) for n in start_road_nodes if int(n) in clean_network_set]
+        valid_goals  = [int(n) for n in goal_road_nodes if int(n) in clean_network_set]
+
+    # Check for validity
+    if not valid_starts:
+        print(f"Error: Could not find any valid connected graph entries for '{start_road_query}'")
+        return False
+    if not valid_goals:
+        print(f"Error: Could not find any valid connected graph entries for '{goal_road_query}'")
+        return False
+    return valid_starts, valid_goals
