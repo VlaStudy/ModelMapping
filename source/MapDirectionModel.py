@@ -276,6 +276,19 @@ def evaluate_and_compare_routes(graph, node_coords, start_node, goal_node, file_
     print(f"    • Code Compute:  {comp_eco:.4f} mg CO2")
     print("==================================================")
 
+    print(f"Eco route reduces driving CO2 by {(co2_short - co2_eco) / co2_short * 100:.1f}% compared to shortest path.")
+    print(f"Code compute reduction: {(comp_short - comp_eco) / comp_short * 100:.1f}%")
+    print(f"Total CO2 reduction (driving + compute): {(co2_short + comp_short/1e6 - co2_eco - comp_eco/1e6) / (co2_short + comp_short/1e6) * 100:.1f}%")
+    print(f"Time increase for eco route: {(t_eco - t_short) / t_short * 100:.1f}%")
+    print(f"Distance increase for eco route: {(d_eco - d_short) / d_short * 100:.1f}%")
+    print("==================================================")
+    print(f"Eco route reduces CO2 by {(co2_fast - co2_eco) / co2_fast * 100:.1f}% compared to fastest path.")
+    print(f"Code compute reduction: {(comp_fast - comp_eco) / comp_fast * 100:.1f}%")
+    print(f"Total CO2 reduction (driving + compute): {(co2_fast +   comp_fast/1e6 - co2_eco - comp_eco/1e6) / (co2_fast + comp_fast/1e6) * 100:.1f}%")
+    print(f"Time increase for eco route vs fastest: {(t_eco - t_fast) / t_fast * 100:.1f}%")
+    print(f"Distance increase for eco route vs fastest: {(d_eco - d_fast) / d_fast * 100:.1f}%")
+
+
     visualize_all_routes(path_short, path_fast, path_eco, graph, node_coords, file_name, comp_short, comp_fast, comp_eco)
 
 
