@@ -138,7 +138,7 @@ def visualize_route(path_node_ids, node_coords, file_name):
 
 
 
-def _create_html_dashboard(title, color, dist, time, energy, co2):
+def _create_html_dashboard(title, color, dist, time, energy, co2, code_co2=None):
     """Generates a clean HTML dashboard card for map tooltips."""
     return f"""
     <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; min-width: 220px; padding: 5px;">
@@ -148,11 +148,12 @@ def _create_html_dashboard(title, color, dist, time, energy, co2):
             <tr style="border-bottom: 1px solid #eee;"><td style="padding: 3px 0;"><b>Est. Time:</b></td><td style="text-align: right;">{time:.1f} s</td></tr>
             <tr style="border-bottom: 1px solid #eee;"><td style="padding: 3px 0;"><b>Energy Used:</b></td><td style="text-align: right;">{energy:.2f} Wh</td></tr>
             <tr><td style="padding: 3px 0; color: {color};"><b>CO2 Footprint:</b></td><td style="text-align: right; font-weight: bold; color: {color};">{co2:.4f} kg</td></tr>
+            {f'<tr><td style="padding: 3px 0; color: {color};"><b>Code Compute:</b></td><td style="text-align: right; font-weight: bold; color: {color};">{code_co2:.4f} mg</td></tr>' if code_co2 is not None else ''}
         </table>
     </div>
     """
 
-def visualize_all_routes(shortest_path, fastest_path, eco_path, graph, node_coords, file_name):
+def visualize_all_routes(shortest_path, fastest_path, eco_path, graph, node_coords, file_name, short_code_co2=None, fast_code_co2=None, eco_code_co2=None):
     """
     Plots routes with live embedded carbon and energy dashboard overlays.
     """
@@ -178,21 +179,21 @@ def visualize_all_routes(shortest_path, fastest_path, eco_path, graph, node_coor
     m = folium.Map(location=short_coords[0], zoom_start=13, tiles="OpenStreetMap")
 
     # Shortest Path Layer (Crimson)
-    dash_short = _create_html_dashboard("📍 Shortest Route (Distance)", "crimson", d1, t1, e1, c1)
+    dash_short = _create_html_dashboard("📍 Shortest Route (Distance)", "crimson", d1, t1, e1, c1, short_code_co2)
     folium.PolyLine(
         short_coords, color="crimson", weight=6, opacity=0.75,
         tooltip=folium.Tooltip(dash_short), name="Shortest Route (Red)"
     ).add_to(m)
 
     # Fastest Path Layer (Royal Blue)
-    dash_fast = _create_html_dashboard("⚡ Fastest Route (Time)", "royalblue", d2, t2, e2, c2)
+    dash_fast = _create_html_dashboard("⚡ Fastest Route (Time)", "royalblue", d2, t2, e2, c2, fast_code_co2)
     folium.PolyLine(
         fast_coords, color="royalblue", weight=6, opacity=0.85,
         tooltip=folium.Tooltip(dash_fast), name="Fastest Route (Blue)"
     ).add_to(m)
 
     # Eco Path Layer (Green)
-    dash_eco = _create_html_dashboard("🌿 Eco-Friendly Route (Energy)", "green", d3, t3, e3, c3)
+    dash_eco = _create_html_dashboard("🌿 Eco-Friendly Route (Energy)", "green", d3, t3, e3, c3, eco_code_co2)
     folium.PolyLine(
         eco_coords, color="green", weight=7, opacity=0.9,
         tooltip=folium.Tooltip(dash_eco), name="Eco-Friendly Route (Green)"

@@ -276,7 +276,7 @@ def evaluate_and_compare_routes(graph, node_coords, start_node, goal_node, file_
     print(f"    • Code Compute:  {comp_eco:.4f} mg CO2")
     print("==================================================")
 
-    visualize_all_routes(path_short, path_fast, path_eco, graph, node_coords, file_name)
+    visualize_all_routes(path_short, path_fast, path_eco, graph, node_coords, file_name, comp_short, comp_fast, comp_eco)
 
 
 
